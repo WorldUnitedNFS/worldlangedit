@@ -46,6 +46,7 @@ func SaveFile(file *LangFile, lFile *LangFile, doXor bool) []byte {
 		stringsLen += len(e.String) + 1
 	}
 	langLen := 36 + len(hEntries)*8 + stringsLen
+	langLen += 4 - (langLen % 4)
 	paddingLen := 16 - (langLen % 16)
 	if paddingLen-8 < 0 {
 		paddingLen += 16
