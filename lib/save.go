@@ -9,12 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/redbluescreen/worldlangedit/lib/charmap"
 	"github.com/redbluescreen/worldlangedit/lib/xor"
-	"golang.org/x/text/encoding/charmap"
 )
 
 func SaveFile(file *LangFile, lFile *LangFile, doXor bool) []byte {
-	encoder := charmap.ISO8859_1.NewEncoder()
+	encoder := charmap.FromChunk(file.EndData)
 
 	type hEntry struct {
 		Hash   uint32
@@ -24,10 +24,7 @@ func SaveFile(file *LangFile, lFile *LangFile, doXor bool) []byte {
 	}
 	hEntries := make([]*hEntry, len(file.Entries))
 	for i, e := range file.Entries {
-		b, err := encoder.Bytes([]byte(e.String))
-		if err != nil {
-			panic(err)
-		}
+		b := encoder.EncodeString(e.String)
 		var label string
 		for _, le := range lFile.Entries {
 			if le.Hash == e.Hash {

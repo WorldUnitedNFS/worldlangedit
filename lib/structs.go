@@ -13,4 +13,5 @@ type LangFileEntry struct {
 	Hash   uint32
 	String string
 	Offset uint32
+	OriginalBytes []byte
 }
