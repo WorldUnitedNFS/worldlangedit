@@ -5,9 +5,12 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
@@ -21,18 +24,37 @@ var logStatus *walk.StatusBarItem
 var table *walk.TableView
 var saveButton *walk.Action
 var addButton *walk.Action
+var searchEdit *walk.LineEdit
 
 var labelsFile *lib.LangFile
 var langFile *lib.LangFile
 var langFilePath string
 var labelsFilePath string
 var labelsEdited bool
+var tableEntries []TableEntry
 
 type TableEntry struct {
 	Hash        uint32
 	IsNew       bool
 	Label       string
 	Translation string
+}
+
+func UpdateShownTableEntries() {
+	search := strings.ToUpper(searchEdit.Text())
+	if len(search) == 0 {
+		table.SetModel(tableEntries)
+	} else {
+		shownEntries := make([]TableEntry, 0)
+		for _, entry := range tableEntries {
+			c1 := strings.ToUpper(entry.Label)
+			c2 := strings.ToUpper(entry.Translation)
+			if strings.Contains(c1, search) || strings.Contains(c2, search) {
+				shownEntries = append(shownEntries, entry)
+			}
+		}
+		table.SetModel(shownEntries)
+	}
 }
 
 func toolOpenTriggered() {
@@ -73,7 +95,8 @@ func toolOpenTriggered() {
 		i++
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Hash < entries[j].Hash })
-	table.SetModel(entries)
+	tableEntries = entries
+	UpdateShownTableEntries()
 	logStatus.SetText("File opened")
 	statusBar.SetText(d.FilePath)
 	saveButton.SetEnabled(true)
@@ -141,8 +164,13 @@ func tableItemActivated() {
 						OnClicked: func() {
 							db.Submit()
 
-							table.Model().([]TableEntry)[table.CurrentIndex()] = entry
-							table.SetModel(table.Model().([]TableEntry))
+							for i, e := range tableEntries {
+								if e.Hash == origHash {
+									tableEntries[i] = entry
+									break
+								}
+							}
+							UpdateShownTableEntries()
 							for i, e := range langFile.Entries {
 								if e.Hash == origHash {
 									langFile.Entries[i].Hash = entry.Hash
@@ -167,11 +195,20 @@ func tableItemActivated() {
 	}.Run(win)
 }
 
+func BackupFileIfNeeded(path string) {
+	if _, err := os.Stat(path + ".bak"); os.IsNotExist(err) {
+		err = os.Rename(path, path+".bak")
+		fmt.Println(err)
+	}
+}
+
 func toolSaveTriggered() {
 	f := lib.SaveFile(langFile, labelsFile, true)
+	BackupFileIfNeeded(langFilePath)
 	ioutil.WriteFile(langFilePath, f, 666)
 	if labelsEdited {
 		f = lib.SaveFile(labelsFile, labelsFile, true)
+		BackupFileIfNeeded(labelsFilePath)
 		ioutil.WriteFile(labelsFilePath, f, 666)
 	}
 	logStatus.SetText("File saved")
@@ -236,9 +273,8 @@ func toolAddTriggered() {
 						OnClicked: func() {
 							db.Submit()
 
-							model := table.Model().([]TableEntry)
-							model = append(model, entry)
-							table.SetModel(model)
+							tableEntries = append(tableEntries, entry)
+							UpdateShownTableEntries()
 							langFile.Entries = append(langFile.Entries, lib.LangFileEntry{
 								Hash:   entry.Hash,
 								String: entry.Translation,
@@ -265,6 +301,7 @@ func main() {
 		MinSize:  Size{800, 600},
 		Layout: VBox{
 			MarginsZero: true,
+			SpacingZero: true,
 		},
 		Children: []Widget{
 			TableView{
@@ -281,6 +318,25 @@ func main() {
 					},
 				},
 				OnItemActivated: tableItemActivated,
+			},
+			Composite{
+				Layout: HBox{
+					MarginsZero: true,
+					Margins: Margins{
+						Left: 6,
+					},
+				},
+				Children: []Widget{
+					Label{
+						Text: "Search:",
+					},
+					LineEdit{
+						AssignTo: &searchEdit,
+						OnTextChanged: func() {
+							UpdateShownTableEntries()
+						},
+					},
+				},
 			},
 		},
 		ToolBar: ToolBar{
