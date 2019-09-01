@@ -20,10 +20,13 @@ var statusBar *walk.StatusBarItem
 var logStatus *walk.StatusBarItem
 var table *walk.TableView
 var saveButton *walk.Action
+var addButton *walk.Action
 
 var labelsFile *lib.LangFile
 var langFile *lib.LangFile
 var langFilePath string
+var labelsFilePath string
+var labelsEdited bool
 
 type TableEntry struct {
 	Hash        uint32
@@ -44,8 +47,8 @@ func toolOpenTriggered() {
 		return
 	}
 	langFile = lib.ParseFile(enc)
-	fileL := path.Join(path.Dir(d.FilePath), "Labels_Global.bin")
-	enc, err = ioutil.ReadFile(fileL)
+	labelsFilePath = path.Join(path.Dir(d.FilePath), "Labels_Global.bin")
+	enc, err = ioutil.ReadFile(labelsFilePath)
 	if err != nil {
 		walk.MsgBox(win, "Error", "Failed to open Labels_Global.bin", walk.MsgBoxIconError)
 		return
@@ -74,6 +77,7 @@ func toolOpenTriggered() {
 	logStatus.SetText("File opened")
 	statusBar.SetText(d.FilePath)
 	saveButton.SetEnabled(true)
+	addButton.SetEnabled(true)
 }
 
 func tableItemActivated() {
@@ -166,9 +170,92 @@ func tableItemActivated() {
 func toolSaveTriggered() {
 	f := lib.SaveFile(langFile, labelsFile, true)
 	ioutil.WriteFile(langFilePath, f, 666)
-	// f = lib.SaveFile(labelsFile, labelsFile)
-	// ioutil.WriteFile(langFilePath+".lnew", f, 666)
+	if labelsEdited {
+		f = lib.SaveFile(labelsFile, labelsFile, true)
+		ioutil.WriteFile(labelsFilePath, f, 666)
+	}
 	logStatus.SetText("File saved")
+}
+
+func toolAddTriggered() {
+	entry := TableEntry{}
+	var dlg *walk.Dialog
+	var db *walk.DataBinder
+	var labelEdit *walk.LineEdit
+	var hashEdit *walk.NumberEdit
+	Dialog{
+		AssignTo: &dlg,
+		Title:    "Add translation",
+		MinSize:  Size{500, 300},
+		DataBinder: DataBinder{
+			AssignTo:   &db,
+			Name:       "entry",
+			DataSource: &entry,
+		},
+		Layout: VBox{},
+		Children: []Widget{
+			Composite{
+				Layout: Grid{Columns: 2},
+				Children: []Widget{
+					Label{
+						Text: "Hash:",
+					},
+					NumberEdit{
+						AssignTo: &hashEdit,
+						Value:    Bind("Hash"),
+						// TextAlignment: AlignNear,
+						// Decimals:      0,
+						ReadOnly: true,
+					},
+					Label{
+						Text: "Label:",
+					},
+					LineEdit{
+						AssignTo: &labelEdit,
+						Text:     Bind("Label"),
+						OnTextChanged: func() {
+							t := labelEdit.Text()
+							h := lib.BinHash(t)
+							hashEdit.SetValue(float64(h))
+						},
+					},
+					Label{
+						Text: "Translation:",
+					},
+					TextEdit{
+						Text: Bind("Translation"),
+					},
+				},
+			},
+			Composite{
+				Layout: HBox{},
+				Children: []Widget{
+					HSpacer{},
+					PushButton{
+						Text: "Save",
+						OnClicked: func() {
+							db.Submit()
+
+							model := table.Model().([]TableEntry)
+							model = append(model, entry)
+							table.SetModel(model)
+							langFile.Entries = append(langFile.Entries, lib.LangFileEntry{
+								Hash:   entry.Hash,
+								String: entry.Translation,
+							})
+							labelsFile.Entries = append(labelsFile.Entries, lib.LangFileEntry{
+								Hash:   entry.Hash,
+								String: entry.Label,
+							})
+							labelsEdited = true
+
+							dlg.Accept()
+						},
+					},
+				},
+			},
+		},
+	}.Run(win)
 }
 
 func main() {
@@ -210,6 +297,12 @@ func main() {
 					Enabled:     false,
 					OnTriggered: toolSaveTriggered,
 					Shortcut:    Shortcut{Modifiers: walk.ModControl, Key: walk.KeyS},
+				},
+				Action{
+					AssignTo:    &addButton,
+					Text:        "Add",
+					Enabled:     false,
+					OnTriggered: toolAddTriggered,
 				},
 			},
 		},
