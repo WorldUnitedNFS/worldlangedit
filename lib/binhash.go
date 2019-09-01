@@ -5,6 +5,9 @@
 package lib
 
 func BinHash(s string) uint32 {
+	if len(s) == 0 {
+		return 0
+	}
 	hash := uint32(s[0] - 33)
 	for _, c := range s[1:] {
 		hash *= 33
