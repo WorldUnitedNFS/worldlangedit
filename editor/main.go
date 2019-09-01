@@ -5,7 +5,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -61,7 +60,10 @@ func toolOpenTriggered() {
 	d := &walk.FileDialog{
 		Filter: "Language files|*_Global.bin",
 	}
-	d.ShowOpen(win)
+	acc, _ := d.ShowOpen(win)
+	if !acc {
+		return
+	}
 	langFilePath = d.FilePath
 	enc, err := ioutil.ReadFile(d.FilePath)
 	if err != nil {
@@ -197,8 +199,7 @@ func tableItemActivated() {
 
 func BackupFileIfNeeded(path string) {
 	if _, err := os.Stat(path + ".bak"); os.IsNotExist(err) {
-		err = os.Rename(path, path+".bak")
-		fmt.Println(err)
+		os.Rename(path, path+".bak")
 	}
 }
 
