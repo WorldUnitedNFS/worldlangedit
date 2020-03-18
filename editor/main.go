@@ -14,7 +14,7 @@ import (
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 
-	"github.com/redbluescreen/worldlangedit/lib"
+	"github.com/WorldUnitedNFS/worldlangedit/lib"
 )
 
 var win *walk.MainWindow
@@ -42,7 +42,10 @@ type TableEntry struct {
 func UpdateShownTableEntries() {
 	search := strings.ToUpper(searchEdit.Text())
 	if len(search) == 0 {
-		table.SetModel(tableEntries)
+		err := table.SetModel(tableEntries)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		shownEntries := make([]TableEntry, 0)
 		for _, entry := range tableEntries {
@@ -52,7 +55,10 @@ func UpdateShownTableEntries() {
 				shownEntries = append(shownEntries, entry)
 			}
 		}
-		table.SetModel(shownEntries)
+		err := table.SetModel(shownEntries)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -99,10 +105,22 @@ func toolOpenTriggered() {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Hash < entries[j].Hash })
 	tableEntries = entries
 	UpdateShownTableEntries()
-	logStatus.SetText("File opened")
-	statusBar.SetText(d.FilePath)
-	saveButton.SetEnabled(true)
-	addButton.SetEnabled(true)
+	err = logStatus.SetText("File opened")
+	if err != nil {
+		panic(err)
+	}
+	err = statusBar.SetText(d.FilePath)
+	if err != nil {
+		panic(err)
+	}
+	err = saveButton.SetEnabled(true)
+	if err != nil {
+		panic(err)
+	}
+	err = addButton.SetEnabled(true)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func tableItemActivated() {
@@ -112,10 +130,10 @@ func tableItemActivated() {
 	var labelEdit *walk.LineEdit
 	var hashEdit *walk.NumberEdit
 	origHash := entry.Hash
-	Dialog{
+	_, err := Dialog{
 		AssignTo: &dlg,
 		Title:    "Edit translation",
-		MinSize:  Size{500, 300},
+		MinSize:  Size{Width: 500, Height: 300},
 		DataBinder: DataBinder{
 			AssignTo:   &db,
 			Name:       "entry",
@@ -145,7 +163,10 @@ func tableItemActivated() {
 						OnTextChanged: func() {
 							t := labelEdit.Text()
 							h := lib.BinHash(t)
-							hashEdit.SetValue(float64(h))
+							err := hashEdit.SetValue(float64(h))
+							if err != nil {
+								panic(err)
+							}
 						},
 						ReadOnly: true,
 					},
@@ -164,7 +185,10 @@ func tableItemActivated() {
 					PushButton{
 						Text: "Save",
 						OnClicked: func() {
-							db.Submit()
+							err := db.Submit()
+							if err != nil {
+								panic(err)
+							}
 
 							for i, e := range tableEntries {
 								if e.Hash == origHash {
@@ -173,19 +197,45 @@ func tableItemActivated() {
 								}
 							}
 							UpdateShownTableEntries()
+
+							updatedEntry := false
+
 							for i, e := range langFile.Entries {
 								if e.Hash == origHash {
 									langFile.Entries[i].Hash = entry.Hash
 									langFile.Entries[i].String = entry.Translation
+									updatedEntry = true
 									break
 								}
 							}
+
+							if !updatedEntry {
+								langFile.Entries = append(langFile.Entries, lib.LangFileEntry{
+									Hash:          entry.Hash,
+									String:        entry.Translation,
+									Offset:        0,
+									OriginalBytes: nil,
+								})
+							}
+
+							updatedLabel := false
+
 							for i, e := range labelsFile.Entries {
 								if e.Hash == origHash {
 									labelsFile.Entries[i].Hash = entry.Hash
 									labelsFile.Entries[i].String = entry.Label
+									updatedLabel = true
 									break
 								}
+							}
+
+							if !updatedLabel {
+								labelsFile.Entries = append(labelsFile.Entries, lib.LangFileEntry{
+									Hash:          entry.Hash,
+									String:        entry.Label,
+									Offset:        0,
+									OriginalBytes: nil,
+								})
 							}
 
 							dlg.Accept()
@@ -195,24 +245,41 @@ func tableItemActivated() {
 			},
 		},
 	}.Run(win)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func BackupFileIfNeeded(path string) {
 	if _, err := os.Stat(path + ".bak"); os.IsNotExist(err) {
-		os.Rename(path, path+".bak")
+		err := os.Rename(path, path+".bak")
+
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
 func toolSaveTriggered() {
 	f := lib.SaveFile(langFile, labelsFile, true)
 	BackupFileIfNeeded(langFilePath)
-	ioutil.WriteFile(langFilePath, f, 666)
+	err := ioutil.WriteFile(langFilePath, f, 666)
+	if err != nil {
+		panic(err)
+	}
 	if labelsEdited {
 		f = lib.SaveFile(labelsFile, labelsFile, true)
 		BackupFileIfNeeded(labelsFilePath)
-		ioutil.WriteFile(labelsFilePath, f, 666)
+		err = ioutil.WriteFile(labelsFilePath, f, 666)
+		if err != nil {
+			panic(err)
+		}
 	}
-	logStatus.SetText("File saved")
+	err = logStatus.SetText("File saved")
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func toolAddTriggered() {
@@ -221,10 +288,10 @@ func toolAddTriggered() {
 	var db *walk.DataBinder
 	var labelEdit *walk.LineEdit
 	var hashEdit *walk.NumberEdit
-	Dialog{
+	_, err := Dialog{
 		AssignTo: &dlg,
 		Title:    "Add translation",
-		MinSize:  Size{500, 300},
+		MinSize:  Size{Width: 500, Height: 300},
 		DataBinder: DataBinder{
 			AssignTo:   &db,
 			Name:       "entry",
@@ -254,7 +321,10 @@ func toolAddTriggered() {
 						OnTextChanged: func() {
 							t := labelEdit.Text()
 							h := lib.BinHash(t)
-							hashEdit.SetValue(float64(h))
+							err := hashEdit.SetValue(float64(h))
+							if err != nil {
+								panic(err)
+							}
 						},
 					},
 					Label{
@@ -272,7 +342,10 @@ func toolAddTriggered() {
 					PushButton{
 						Text: "Save",
 						OnClicked: func() {
-							db.Submit()
+							err := db.Submit()
+							if err != nil {
+								panic(err)
+							}
 
 							tableEntries = append(tableEntries, entry)
 							UpdateShownTableEntries()
@@ -293,13 +366,16 @@ func toolAddTriggered() {
 			},
 		},
 	}.Run(win)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {
-	MainWindow{
+	_, err := MainWindow{
 		AssignTo: &win,
 		Title:    "WorldLangEdit by redbluescreen",
-		MinSize:  Size{800, 600},
+		MinSize:  Size{Width: 800, Height: 600},
 		Layout: VBox{
 			MarginsZero: true,
 			SpacingZero: true,
@@ -308,13 +384,13 @@ func main() {
 			TableView{
 				AssignTo: &table,
 				Columns: []TableViewColumn{
-					TableViewColumn{
+					{
 						Name: "Hash",
 					},
-					TableViewColumn{
+					{
 						Name: "Label",
 					},
-					TableViewColumn{
+					{
 						Name: "Translation",
 					},
 				},
@@ -364,13 +440,17 @@ func main() {
 			},
 		},
 		StatusBarItems: []StatusBarItem{
-			StatusBarItem{
+			{
 				AssignTo: &logStatus,
 			},
-			StatusBarItem{
+			{
 				AssignTo: &statusBar,
 				Width:    400,
 			},
 		},
 	}.Run()
+
+	if err != nil {
+		panic(err)
+	}
 }

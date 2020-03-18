@@ -1,3 +1,3 @@
-module github.com/redbluescreen/worldlangedit
+module github.com/WorldUnitedNFS/worldlangedit
 
 go 1.12

@@ -6,9 +6,8 @@ package lib
 
 import (
 	"encoding/binary"
-
-	"github.com/redbluescreen/worldlangedit/lib/charmap"
-	"github.com/redbluescreen/worldlangedit/lib/xor"
+	"github.com/WorldUnitedNFS/worldlangedit/lib/charmap"
+	"github.com/WorldUnitedNFS/worldlangedit/lib/xor"
 )
 
 func ztString(b []byte) []byte {
@@ -38,7 +37,7 @@ func ParseFile(data []byte) *LangFile {
 	if binary.LittleEndian.Uint32(data[offset:offset+4]) == 0 {
 		offset += int(binary.LittleEndian.Uint32(data[offset+4:offset+8])) + 8
 	}
-	endData := data[offset:]
+	endData := data[offset+8:]
 	chm := charmap.FromChunk(endData)
 
 	offset = 36
@@ -62,6 +61,6 @@ func ParseFile(data []byte) *LangFile {
 
 	return &LangFile{
 		Entries: entries,
-		EndData: endData,
+		CharMap: chm,
 	}
 }

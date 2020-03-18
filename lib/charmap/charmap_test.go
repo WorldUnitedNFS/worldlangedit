@@ -1,71 +1,84 @@
-// This Source Code Form is subject to the terms of the Mozilla Public
-// License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
-
 package charmap_test
 
 import (
-	"bytes"
-	"encoding/hex"
+	"github.com/WorldUnitedNFS/worldlangedit/lib"
 	"io/ioutil"
-	"os"
 	"testing"
-
-	"github.com/redbluescreen/worldlangedit/lib"
-	"github.com/redbluescreen/worldlangedit/lib/charmap"
 )
 
-func TestDecodeEncode(t *testing.T) {
-	languages := []string{
-		"Chinese_Simp",
-		"Chinese_Trad",
-		"English",
-		"French",
-		"German",
-		"Polish",
-		"Portuguese",
-		"Russian",
-		"Spanish",
-		"Thai",
-		"Turkish",
+func TestDecode(t *testing.T) {
+	bytes, err := ioutil.ReadFile("../../testdata/Chinese_Simp_Global.bin")
+
+	if err != nil {
+		t.Errorf("Error occurred while reading file: %v", err)
+		t.FailNow()
 	}
-	var failureFile *os.File
-	defer func() {
-		if failureFile != nil {
-			failureFile.Close()
+
+	lf := lib.ParseFile(bytes)
+	entry := lf.Entries[0]
+
+	decodedText := lf.CharMap.DecodeBytes(entry.OriginalBytes)
+
+	if decodedText != "激活工作人员" {
+		t.Errorf("Failed to decode string. Expected '激活工作人员', got %s", decodedText)
+		t.FailNow()
+	}
+}
+
+func TestMakingOurOwn(t *testing.T) {
+	// Load French file
+	langBytes, err := ioutil.ReadFile("../../testdata/French_Global.bin")
+
+	if err != nil {
+		t.Errorf("Error occurred while reading file: %v", err)
+		t.FailNow()
+	}
+	labelsBytes, err := ioutil.ReadFile("../../testdata/Labels_Global.bin")
+
+	if err != nil {
+		t.Errorf("Error occurred while reading file: %v", err)
+		t.FailNow()
+	}
+
+	langFile := lib.ParseFile(langBytes)
+	labelsFile := lib.ParseFile(labelsBytes)
+
+	t.Logf("Loaded language file. Histogram has %d entries", langFile.CharMap.NumEntries)
+
+	for i, c := range langFile.CharMap.EntryTable {
+		if c >= 0x80 {
+			t.Logf("\tHistogram entry [%d]: %c (0x%04x) (0b%16b)", i, c, c, c)
 		}
-	}()
-	for _, language := range languages {
-		data, err := ioutil.ReadFile("../../testdata/" + language + "_Global.bin")
-		if err != nil {
-			t.Skip("Failed to read file for language " + language)
-			return
+	}
+
+	newMap := lib.BuildCharMap(langFile)
+
+	t.Logf("New histogram has %d entries", newMap.NumEntries)
+
+	for _, e := range langFile.Entries {
+		encodedBytes := newMap.EncodeString(e.String)
+		decodedText := newMap.DecodeBytes(encodedBytes)
+
+		if decodedText != e.String {
+			t.Errorf("String 0x%08x (%d) was corrupted. Original: %s / New: %s", e.Hash, e.Hash, e.String, decodedText)
+			t.FailNow()
 		}
-		f := lib.ParseFile(data)
-		chm := charmap.FromChunk(f.EndData)
-		correct := 0
-		for _, entry := range f.Entries {
-			enc := chm.EncodeString(entry.String)
-			if bytes.Equal(enc, entry.OriginalBytes) {
-				correct++
-			} else {
-				if failureFile == nil {
-					failureFile, err = os.Create("encode_failure.log")
-					if err != nil {
-						panic(err)
-					}
-				}
-				failureFile.WriteString("----------------------------------------\n")
-				failureFile.WriteString("Original bytes:\n")
-				failureFile.WriteString(hex.Dump(entry.OriginalBytes))
-				failureFile.WriteString("Decoded string: " + entry.String + "\n")
-				failureFile.WriteString("Encoded bytes:\n")
-				failureFile.WriteString(hex.Dump(enc))
-			}
-		}
-		t.Logf("%s: %v/%v (%.1f%%)", language, correct, len(f.Entries), float64(correct)/float64(len(f.Entries))*100)
-		if correct != len(f.Entries) {
-			t.Fail()
+
+		t.Logf("String 0x%08x (%d) encoded/decoded successfully", e.Hash, e.Hash)
+	}
+
+	// Save file and test
+	t.Logf("Testing generated data...")
+
+	genData := lib.SaveFile(langFile, labelsFile, true)
+	loadedFromGen := lib.ParseFile(genData)
+
+	for _, e := range langFile.Entries {
+		e2 := loadedFromGen.FindEntryByHash(e.Hash)
+
+		if e2.String != e.String {
+			t.Errorf("String 0x%08x (%d) was corrupted. Original: %s / New: %s", e.Hash, e.Hash, e.String, e2.String)
+			t.FailNow()
 		}
 	}
 }

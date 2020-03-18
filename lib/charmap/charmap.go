@@ -5,94 +5,113 @@
 package charmap
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 )
 
 type Charmap struct {
-	chunk []byte
+	NumEntries int32
+	EntryTable [0xC00]uint16
 }
 
 func FromChunk(chunk []byte) *Charmap {
-	return &Charmap{
-		chunk: chunk,
+	buf := bytes.NewBuffer(chunk)
+	cm := &Charmap{}
+	err := binary.Read(buf, binary.LittleEndian, cm)
+	if err != nil {
+		panic(err)
 	}
+	return cm
 }
 
 func (cm *Charmap) DecodeBytes(b []byte) string {
-	out := make([]rune, 0)
-	i := 0
-	for {
-		if i == len(b) {
-			break
-		}
-		if i > len(b) {
-			panic("i is out of bounds")
-		}
-		char := b[i]
-		if char < 128 {
-			out = append(out, rune(char))
-			i++
-		} else {
-			offset := 12 + int(char)*2
-			newChar := binary.LittleEndian.Uint16(cm.chunk[offset : offset+2])
-			if newChar < 128 {
-				addCount := 128 * int(newChar)
-				char = b[i+1]
-				offset := 12 + int(char)*2 + addCount
-				newChar := binary.LittleEndian.Uint16(cm.chunk[offset : offset+2])
-				out = append(out, rune(newChar))
-				i += 2
-			} else {
-				out = append(out, rune(newChar))
+	runes := make([]rune, 0)
+
+	for i := 0; i < len(b); {
+		curByte := rune(b[i])
+		i++
+
+		if curByte >= 0x80 {
+			histEntry := rune(cm.EntryTable[curByte])
+
+			if histEntry >= 0x80 {
+				curByte = histEntry
+				//fmt.Printf("encountered: %c\n", curByte)
+			} else if histEntry != 0 {
+				nextByte := b[i]
 				i++
+				if nextByte >= 0x80 {
+					curByte = rune(cm.EntryTable[128*histEntry-128+rune(nextByte)])
+					//fmt.Printf("encountered: %c\n", curByte)
+				}
+			} else {
+				panic("Could not decode string")
 			}
 		}
-	}
-	return string(out)
-}
 
-func (cm *Charmap) findHighCharOffset(char rune) int {
-	offset := 0
-	for {
-		byteOffset := 12 + offset*2
-		if byteOffset == len(cm.chunk) {
-			panic(fmt.Sprintf("Cannot encode character %x (%c)", char, char))
-		}
-		charThere := binary.LittleEndian.Uint16(cm.chunk[byteOffset : byteOffset+2])
-		if rune(charThere) == char {
-			break
-		}
-		offset++
+		runes = append(runes, curByte)
 	}
-	return offset
+
+	return string(runes)
 }
 
 func (cm *Charmap) EncodeString(str string) []byte {
-	defer func() {
-		err := recover()
-		if err != nil {
-			fmt.Printf("Failed to encode string %s\n", str)
-			panic(err)
-		}
-	}()
 	out := make([]byte, 0)
-	for _, char := range str {
-		if char < 128 {
-			out = append(out, byte(char))
+
+	for _, c := range str {
+		if c >= 0xFF80 {
+			panic("what even IS this?")
+		}
+
+		savedChar := c
+
+		if c >= 0x80 {
+			curIndex := int32(128)
+			maxIndex := cm.NumEntries
+
+			if cm.NumEntries > 128 {
+				for curIndex < maxIndex {
+					if rune(cm.EntryTable[curIndex]) == c {
+						break
+					}
+					curIndex++
+				}
+			}
+
+			if curIndex >= 256 {
+				if curIndex != maxIndex {
+					c = 128
+					searchIndex := 128
+					update := true
+
+					for rune(cm.EntryTable[searchIndex]) != curIndex>>7 {
+						c++
+						if c >= 256 {
+							update = false
+							break
+						}
+						searchIndex++
+					}
+
+					if update {
+						out = append(out, byte(c))
+						out = append(out, byte(curIndex%128-128))
+					}
+				}
+
+				notFound := c == 256 || curIndex == maxIndex
+				c = savedChar
+				if notFound {
+					panic(fmt.Sprintf("could not encode character %c! string: %s", c, str))
+				}
+			} else {
+				out = append(out, byte(curIndex))
+			}
 		} else {
-			offset := cm.findHighCharOffset(char)
-			if offset > 255 {
-				headCharCnt := offset / 128
-				offset -= (headCharCnt - 1) * 128
-				headChar := cm.findHighCharOffset(rune(headCharCnt))
-				out = append(out, byte(headChar))
-			}
-			if offset > 255 {
-				panic("offset overflows")
-			}
-			out = append(out, byte(offset))
+			out = append(out, byte(c))
 		}
 	}
+
 	return out
 }
