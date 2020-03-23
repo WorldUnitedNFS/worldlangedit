@@ -43,6 +43,11 @@ func (r *UnpackCommand) Run(_ *Context) error {
 	}
 
 	labelsPack := lib.ParseFile(labelsData)
+	labelMap := make(map[uint32]string)
+
+	for _, e := range labelsPack.Entries {
+		labelMap[e.Hash] = e.String
+	}
 
 	matches, err := filepath.Glob(path.Join(r.InputPath, "*_Global.bin"))
 
@@ -73,7 +78,7 @@ func (r *UnpackCommand) Run(_ *Context) error {
 		}
 
 		for _, e := range langFile.Entries {
-			langJson.Entries[labelsPack.FindEntryByHash(e.Hash).String] = e.String
+			langJson.Entries[labelMap[e.Hash]] = e.String
 		}
 
 		for _, c := range langFile.CharMap.EntryTable {
