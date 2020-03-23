@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+func FilenameWithoutExtension(fn string) string {
+	return strings.TrimSuffix(fn, path.Ext(fn))
+}
+
 type LanguagePackJson struct {
 	Entries      map[string]string
 	SpecialChars []string
@@ -23,12 +27,14 @@ type Context struct {
 
 //noinspection GoStructTag
 type UnpackCommand struct {
-	InputPath  string `arg name:"in" help:"Path to folder to read language files from."`
+	InputPath  string `arg name:"in" help:"Path to folder to read binary files from."`
 	OutputPath string `arg name:"out" help:"Path to folder to generate text files in."`
 }
 
-func FilenameWithoutExtension(fn string) string {
-	return strings.TrimSuffix(fn, path.Ext(fn))
+//noinspection GoStructTag
+type PackCommand struct {
+	InputPath  string `arg name:"in" help:"Path to folder to read text files from."`
+	OutputPath string `arg name:"out" help:"Path to folder to generate binary files in."`
 }
 
 func (r *UnpackCommand) Run(_ *Context) error {
@@ -58,7 +64,7 @@ func (r *UnpackCommand) Run(_ *Context) error {
 	for _, fp := range matches {
 		_, fn := filepath.Split(fp)
 
-		if fn == "Largest_Global.bin" || fn == "Labels_Global.bin" {
+		if fn == "Largest_Global.bin" {
 			continue
 		}
 
@@ -103,9 +109,15 @@ func (r *UnpackCommand) Run(_ *Context) error {
 	return nil
 }
 
+func (r *PackCommand) Run(_ *Context) error {
+
+	return nil
+}
+
 //noinspection GoStructTag
 var cli struct {
 	Unpack UnpackCommand `cmd help:"Unpack files."`
+	Pack   PackCommand   `cmd help:"Pack files."`
 }
 
 func main() {
