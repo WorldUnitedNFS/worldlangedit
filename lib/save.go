@@ -6,7 +6,6 @@ package lib
 
 import (
 	"encoding/binary"
-	"github.com/WorldUnitedNFS/worldlangedit/lib/charmap"
 	"github.com/WorldUnitedNFS/worldlangedit/lib/xor"
 	"sort"
 	"strings"
@@ -14,7 +13,7 @@ import (
 
 func SaveFile(file *LangFile, lFile *LangFile, doXor bool) []byte {
 	// char map debug
-	cm := BuildCharMap(file)
+	cm := file.CharMap
 
 	type hEntry struct {
 		Hash       uint32
@@ -148,72 +147,4 @@ func SaveFile(file *LangFile, lFile *LangFile, doXor bool) []byte {
 	}
 
 	return data
-}
-
-func BuildCharMap(lf *LangFile) charmap.Charmap {
-	// build our own char map
-	newCharMap := charmap.Charmap{
-		NumEntries: 0,
-		EntryTable: [3072]uint16{},
-	}
-
-	numEntries := int32(0x80)      // 0x00-0x7F get reserved spaces
-	charSet := make(map[rune]bool) // keeps track of characters we've encountered
-
-	for _, entry := range lf.Entries {
-		for _, c := range entry.String {
-			if c >= 0x80 {
-				charSet[c] = true
-			}
-		}
-	}
-
-	chars := make([]rune, 0)
-
-	for r := range charSet {
-		chars = append(chars, r)
-	}
-
-	sort.SliceStable(chars, func(i, j int) bool {
-		return chars[j] < chars[i]
-	})
-
-	numEntries += int32(len(chars))
-
-	jumpEntries := make([]uint16, 0)
-	maxJumpEntry := numEntries >> 7
-
-	if maxJumpEntry >= 2 {
-		jumpEntries = append(jumpEntries, uint16(maxJumpEntry))
-		numEntries++
-	}
-
-	// Determine jump entries
-	for {
-		newMaxJumpEntry := numEntries >> 7
-
-		if newMaxJumpEntry > maxJumpEntry {
-			numEntries++
-			maxJumpEntry = newMaxJumpEntry
-			jumpEntries = append(jumpEntries, uint16(maxJumpEntry))
-		} else {
-			break
-		}
-	}
-
-	mapIndex := 0x80
-
-	for i := len(jumpEntries) - 1; i >= 0; i-- {
-		newCharMap.EntryTable[mapIndex] = jumpEntries[i]
-		mapIndex++
-	}
-
-	for _, r := range chars {
-		newCharMap.EntryTable[mapIndex] = uint16(r)
-		mapIndex++
-	}
-
-	newCharMap.NumEntries = numEntries
-
-	return newCharMap
 }

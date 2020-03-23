@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/WorldUnitedNFS/worldlangedit/lib"
+	"github.com/WorldUnitedNFS/worldlangedit/lib/charmap"
 	"github.com/alecthomas/kong"
 	"io/ioutil"
 	"os"
@@ -14,6 +15,57 @@ import (
 
 func FilenameWithoutExtension(fn string) string {
 	return strings.TrimSuffix(fn, path.Ext(fn))
+}
+
+func BuildCharMap(chars []rune) *charmap.Charmap {
+	newCharMap := &charmap.Charmap{
+		NumEntries: 0,
+		EntryTable: [3072]uint16{},
+	}
+
+	numEntries := int32(0x80) // 0x00-0x7F get reserved spaces
+	numEntries += int32(len(chars))
+
+	tmpNumEntries := numEntries
+
+	jumpEntries := make([]uint16, 0)
+	maxJumpEntry := tmpNumEntries >> 7
+
+	if maxJumpEntry >= 2 {
+		jumpEntries = append(jumpEntries, uint16(maxJumpEntry))
+		tmpNumEntries++
+	}
+
+	// Determine jump entries
+	for {
+		newMaxJumpEntry := tmpNumEntries >> 7
+
+		if newMaxJumpEntry > maxJumpEntry {
+			tmpNumEntries++
+			maxJumpEntry = newMaxJumpEntry
+			jumpEntries = append(jumpEntries, uint16(maxJumpEntry))
+		} else {
+			break
+		}
+	}
+
+	mapIndex := 0x80
+
+	numEntries += maxJumpEntry - 1
+
+	for i := maxJumpEntry; i >= 2; i-- {
+		newCharMap.EntryTable[mapIndex] = uint16(i)
+		mapIndex++
+	}
+
+	for _, r := range chars {
+		newCharMap.EntryTable[mapIndex] = uint16(r)
+		mapIndex++
+	}
+
+	newCharMap.NumEntries = numEntries
+
+	return newCharMap
 }
 
 type LanguagePackJson struct {
@@ -75,7 +127,6 @@ func (r *UnpackCommand) Run(_ *Context) error {
 		}
 		langFile := lib.ParseFile(enc)
 		fmt.Printf("Loaded %d strings from file\n", len(langFile.Entries))
-
 		cleanName := FilenameWithoutExtension(fn)
 		jsonName := path.Join(r.OutputPath, cleanName+".json")
 		langJson := LanguagePackJson{
@@ -110,8 +161,110 @@ func (r *UnpackCommand) Run(_ *Context) error {
 }
 
 func (r *PackCommand) Run(_ *Context) error {
+	if _, err := os.Stat(r.OutputPath); os.IsNotExist(err) {
+		_ = os.Mkdir(r.OutputPath, 0644)
+	}
+
+	matches, err := filepath.Glob(path.Join(r.InputPath, "*_Global.json"))
+
+	if err != nil {
+		panic(err)
+	}
+
+	labelJson := LoadLanguageJson(path.Join(r.InputPath, "Labels_Global.json"))
+	labelPack := BuildLangFileFromJson(labelJson)
+
+	type SavePackEntry struct {
+		Name string
+		Pack *lib.LangFile
+	}
+
+	packs := []SavePackEntry{{
+		Name: "Labels_Global",
+		Pack: labelPack,
+	}}
+
+	for _, fp := range matches {
+		_, fn := filepath.Split(fp)
+
+		if strings.Contains(fn, "Labels") {
+			continue
+		}
+		cleanName := FilenameWithoutExtension(fn)
+
+		langJson := LoadLanguageJson(fp)
+
+		fmt.Println("Loaded", len(langJson.Entries), "strings from", fp)
+
+		lp := BuildLangFileFromJson(langJson)
+		packs = append(packs, SavePackEntry{
+			Name: cleanName,
+			Pack: lp,
+		})
+	}
+
+	for _, p := range packs {
+		op := path.Join(r.OutputPath, p.Name+".bin")
+		fmt.Println("Saving", p.Name, "to", op)
+		f := lib.SaveFile(p.Pack, labelPack, true)
+		err = ioutil.WriteFile(op, f, 666)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("Saved", p.Name, "to", op)
+	}
 
 	return nil
+}
+
+func BuildLangFileFromJson(langJson *LanguagePackJson) *lib.LangFile {
+	specialChars := make([]rune, 0)
+
+	for _, e := range langJson.SpecialChars {
+		var first rune
+		for _, c := range e {
+			first = c
+			break
+		}
+
+		specialChars = append(specialChars, first)
+	}
+
+	entries := make([]lib.LangFileEntry, 0)
+
+	for l, e := range langJson.Entries {
+		entries = append(entries, lib.LangFileEntry{
+			Hash:          lib.BinHash(l),
+			String:        e,
+			Offset:        0,
+			OriginalBytes: nil,
+		})
+	}
+
+	lp := &lib.LangFile{
+		Entries: entries,
+		CharMap: BuildCharMap(specialChars),
+	}
+	return lp
+}
+
+func LoadLanguageJson(fp string) *LanguagePackJson {
+	f, err := os.Open(fp)
+
+	if err != nil {
+		panic(err)
+	}
+
+	decoder := json.NewDecoder(f)
+	decoder.DisallowUnknownFields()
+	langJson := &LanguagePackJson{}
+	err = decoder.Decode(&langJson)
+
+	if err != nil {
+		panic(err)
+	}
+
+	return langJson
 }
 
 //noinspection GoStructTag

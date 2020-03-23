@@ -103,7 +103,7 @@ func (cm *Charmap) EncodeString(str string) []byte {
 				notFound := c == 256 || curIndex == maxIndex
 				c = savedChar
 				if notFound {
-					panic(fmt.Sprintf("could not encode character %c! string: %s", c, str))
+					panic(fmt.Sprintf("could not encode character %c (%d)! string: %s", c, c, str))
 				}
 			} else {
 				out = append(out, byte(curIndex))
