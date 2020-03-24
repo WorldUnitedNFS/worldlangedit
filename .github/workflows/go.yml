@@ -30,9 +30,11 @@ jobs:
       - name: Prepare artifact
         run: |
           mkdir bin
-          cp cmd/jsontool/jsontool.exe bin/jsontool.exe
-          cp cmd/editor/editor.exe bin/editor.exe
-          cp cmd/editor/editor.exe.manifest bin/editor.exe.manifest    
+          ls cmd/jsontool
+          ls cmd/editor
+          #cp cmd/jsontool/jsontool.exe bin/jsontool.exe
+          #cp cmd/editor/editor.exe bin/editor.exe
+          #cp cmd/editor/editor.exe.manifest bin/editor.exe.manifest    
       - name: Upload artifact
         uses: actions/upload-artifact@v1
         with:
