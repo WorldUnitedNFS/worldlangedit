@@ -25,7 +25,7 @@ jobs:
         run: go build -v .
         working-directory: cmd/jsontool
       - name: Build editor
-        run: go build -v .
+        run: go build -v -ldflags -H=windowsgui .
         working-directory: editor
       - name: Prepare artifact
         run: |
