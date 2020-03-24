@@ -274,6 +274,7 @@ var cli struct {
 }
 
 func main() {
+	fmt.Println("JsonTool v2.0.1 by heyitsleo")
 	ctx := kong.Parse(&cli)
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{})
