@@ -87,6 +87,7 @@ type UnpackCommand struct {
 type PackCommand struct {
 	InputPath  string `arg name:"in" help:"Path to folder to read text files from."`
 	OutputPath string `arg name:"out" help:"Path to folder to generate binary files in."`
+	Strict     bool   `help:"Enforce various validation rules (no unimplemented strings, no nonexistent strings, etc). Will result in some slowdown, but prevents stupid mistakes."`
 }
 
 func (r *UnpackCommand) Run(_ *Context) error {
@@ -191,16 +192,29 @@ func (r *PackCommand) Run(_ *Context) error {
 			continue
 		}
 		cleanName := FilenameWithoutExtension(fn)
-
 		langJson := LoadLanguageJson(fp)
-
-		fmt.Println("Loaded", len(langJson.Entries), "strings from", fp)
-
 		lp := BuildLangFileFromJson(langJson)
+
+		if r.Strict {
+			for _, e := range labelPack.Entries {
+				if lp.FindEntryByHash(e.Hash) == nil {
+					return fmt.Errorf("strict mode: pack %s does not have an entry for string %s", cleanName, e.String)
+				}
+			}
+
+			for l := range langJson.Entries {
+				if labelPack.FindEntryByName(l) == nil {
+					return fmt.Errorf("strict mode: pack %s has an entry for a nonexistent string (%s)", cleanName, l)
+				}
+			}
+		}
+
 		packs = append(packs, SavePackEntry{
 			Name: cleanName,
 			Pack: lp,
 		})
+
+		fmt.Println("Loaded", len(langJson.Entries), "strings from", fp)
 	}
 
 	for _, p := range packs {
