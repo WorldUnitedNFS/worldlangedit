@@ -374,7 +374,7 @@ func toolAddTriggered() {
 func main() {
 	_, err := MainWindow{
 		AssignTo: &win,
-		Title:    "WorldLangEdit v2.0.1 by redbluescreen/heyitsleo",
+		Title:    "WorldLangEdit v2.0.2 by redbluescreen/heyitsleo",
 		MinSize:  Size{Width: 800, Height: 600},
 		Layout: VBox{
 			MarginsZero: true,
