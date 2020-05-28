@@ -90,6 +90,13 @@ type PackCommand struct {
 	Strict     bool   `help:"Enforce various validation rules (no unimplemented strings, no nonexistent strings, etc). Will result in some slowdown, but prevents stupid mistakes."`
 }
 
+//noinspection GoStructTag
+type AddStringCommand struct {
+	DataPath string `arg name:"in" help:"Path to folder with text files"`
+	Label    string `arg name:"label" help:"Label of the string to add"`
+	Text     string `arg name:"text" help:"Text of the string to add"`
+}
+
 func (r *UnpackCommand) Run(_ *Context) error {
 	if _, err := os.Stat(r.OutputPath); os.IsNotExist(err) {
 		_ = os.Mkdir(r.OutputPath, 0644)
@@ -130,7 +137,7 @@ func (r *UnpackCommand) Run(_ *Context) error {
 		fmt.Printf("Loaded %d strings from file\n", len(langFile.Entries))
 		cleanName := FilenameWithoutExtension(fn)
 		jsonName := path.Join(r.OutputPath, cleanName+".json")
-		langJson := LanguagePackJson{
+		langJson := &LanguagePackJson{
 			Entries:      make(map[string]string),
 			SpecialChars: make([]string, 0),
 		}
@@ -145,17 +152,27 @@ func (r *UnpackCommand) Run(_ *Context) error {
 			}
 		}
 
-		f, err := os.Create(jsonName)
+		err = SaveLanguageJson(jsonName, langJson)
+
 		if err != nil {
-			panic(err)
+			return err
 		}
-		encoder := json.NewEncoder(f)
-		encoder.SetEscapeHTML(false)
-		encoder.SetIndent("", " ")
-		err = encoder.Encode(langJson)
-		if err != nil {
-			panic(err)
-		}
+	}
+
+	return nil
+}
+
+func SaveLanguageJson(jsonName string, langJson *LanguagePackJson) error {
+	f, err := os.Create(jsonName)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(f)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", " ")
+	err = encoder.Encode(langJson)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -231,6 +248,66 @@ func (r *PackCommand) Run(_ *Context) error {
 	return nil
 }
 
+func (j *LanguagePackJson) AddString(label string, value string) error {
+	if _, exists := j.Entries[label]; exists {
+		return fmt.Errorf("string %s already exists in language pack", label)
+	}
+
+	j.Entries[label] = value
+	return nil
+}
+
+func (r *AddStringCommand) Run(_ *Context) error {
+	if _, err := os.Stat(r.DataPath); os.IsNotExist(err) {
+		_ = os.Mkdir(r.DataPath, 0644)
+	}
+
+	matches, err := filepath.Glob(path.Join(r.DataPath, "*_Global.json"))
+
+	if err != nil {
+		panic(err)
+	}
+
+	labelJson := LoadLanguageJson(path.Join(r.DataPath, "Labels_Global.json"))
+
+	fmt.Println("Adding label")
+	err = labelJson.AddString(r.Label, r.Label)
+
+	if err != nil {
+		return err
+	}
+
+	err = SaveLanguageJson(path.Join(r.DataPath, "Labels_Global.json"), labelJson)
+
+	if err != nil {
+		return err
+	}
+
+	for _, fp := range matches {
+		_, fn := filepath.Split(fp)
+
+		if strings.Contains(fn, "Labels") {
+			continue
+		}
+		cleanName := FilenameWithoutExtension(fn)
+		fmt.Printf("Adding string to %s\n", cleanName)
+		langJson := LoadLanguageJson(fp)
+		err = langJson.AddString(r.Label, r.Text)
+
+		if err != nil {
+			return err
+		}
+
+		err = SaveLanguageJson(fp, langJson)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func BuildLangFileFromJson(langJson *LanguagePackJson) *lib.LangFile {
 	specialChars := make([]rune, 0)
 
@@ -283,12 +360,13 @@ func LoadLanguageJson(fp string) *LanguagePackJson {
 
 //noinspection GoStructTag
 var cli struct {
-	Unpack UnpackCommand `cmd help:"Unpack files."`
-	Pack   PackCommand   `cmd help:"Pack files."`
+	Unpack    UnpackCommand    `cmd help:"Unpack files."`
+	Pack      PackCommand      `cmd help:"Pack files."`
+	AddString AddStringCommand `cmd help:"Add a string."`
 }
 
 func main() {
-	fmt.Println("JsonTool v2.0.2 by heyitsleo")
+	fmt.Println("JsonTool v2.0.3 by heyitsleo")
 	ctx := kong.Parse(&cli)
 	// Call the Run() method of the selected parsed command.
 	err := ctx.Run(&Context{})
