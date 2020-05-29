@@ -97,6 +97,17 @@ type AddStringCommand struct {
 	Text     string `arg name:"text" help:"Text of the string to add"`
 }
 
+//noinspection GoStructTag
+type RemoveStringCommand struct {
+	DataPath string `arg name:"in" help:"Path to folder with text files"`
+	Label    string `arg name:"label" help:"Label of the string to remove"`
+}
+
+//noinspection GoStructTag
+type HashCommand struct {
+	Value string `arg name:"value" help:"The string to hash"`
+}
+
 func (r *UnpackCommand) Run(_ *Context) error {
 	if _, err := os.Stat(r.OutputPath); os.IsNotExist(err) {
 		_ = os.Mkdir(r.OutputPath, 0644)
@@ -257,6 +268,14 @@ func (j *LanguagePackJson) AddString(label string, value string) error {
 	return nil
 }
 
+func (j *LanguagePackJson) RemoveString(label string) error {
+	if _, exists := j.Entries[label]; !exists {
+		return fmt.Errorf("string %s does not exist in language pack", label)
+	}
+	delete(j.Entries, label)
+	return nil
+}
+
 func (r *AddStringCommand) Run(_ *Context) error {
 	if _, err := os.Stat(r.DataPath); os.IsNotExist(err) {
 		_ = os.Mkdir(r.DataPath, 0644)
@@ -293,6 +312,63 @@ func (r *AddStringCommand) Run(_ *Context) error {
 		fmt.Printf("Adding string to %s\n", cleanName)
 		langJson := LoadLanguageJson(fp)
 		err = langJson.AddString(r.Label, r.Text)
+
+		if err != nil {
+			return err
+		}
+
+		err = SaveLanguageJson(fp, langJson)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *HashCommand) Run(_ *Context) error {
+	hash := lib.BinHash(r.Value)
+	fmt.Printf("Hash of '%s': 0x%08x (%d)\n", r.Value, hash, hash)
+	return nil
+}
+
+func (r *RemoveStringCommand) Run(_ *Context) error {
+	if _, err := os.Stat(r.DataPath); os.IsNotExist(err) {
+		_ = os.Mkdir(r.DataPath, 0644)
+	}
+
+	matches, err := filepath.Glob(path.Join(r.DataPath, "*_Global.json"))
+
+	if err != nil {
+		panic(err)
+	}
+
+	labelJson := LoadLanguageJson(path.Join(r.DataPath, "Labels_Global.json"))
+
+	fmt.Println("Removing label")
+	err = labelJson.RemoveString(r.Label)
+
+	if err != nil {
+		return err
+	}
+
+	err = SaveLanguageJson(path.Join(r.DataPath, "Labels_Global.json"), labelJson)
+
+	if err != nil {
+		return err
+	}
+
+	for _, fp := range matches {
+		_, fn := filepath.Split(fp)
+
+		if strings.Contains(fn, "Labels") {
+			continue
+		}
+		cleanName := FilenameWithoutExtension(fn)
+		fmt.Printf("Removing string from %s\n", cleanName)
+		langJson := LoadLanguageJson(fp)
+		err = langJson.RemoveString(r.Label)
 
 		if err != nil {
 			return err
@@ -360,9 +436,11 @@ func LoadLanguageJson(fp string) *LanguagePackJson {
 
 //noinspection GoStructTag
 var cli struct {
-	Unpack    UnpackCommand    `cmd help:"Unpack files."`
-	Pack      PackCommand      `cmd help:"Pack files."`
-	AddString AddStringCommand `cmd help:"Add a string."`
+	Unpack       UnpackCommand       `cmd help:"Unpack files."`
+	Pack         PackCommand         `cmd help:"Pack files."`
+	AddString    AddStringCommand    `cmd help:"Add a string."`
+	RemoveString RemoveStringCommand `cmd help:"Remove a string."`
+	Hash         HashCommand         `cmd help:"Calculate the hash of a string."`
 }
 
 func main() {
